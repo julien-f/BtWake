@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""Minimal UI to choose which Bluetooth devices may wake the system.
+
+SPDX-License-Identifier: GPL-3.0-or-later
+"""
+
+import os
+import sys
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
+
+APP_ID = "io.github.julien_f.BtWake"
+BLUEZ = "org.bluez"
+DEVICE_IFACE = "org.bluez.Device1"
+ADAPTER_IFACE = "org.bluez.Adapter1"
+WATCHED_PROPS = {"Alias", "Name", "Icon", "Paired", "Bonded", "Connected", "WakeAllowed", "Powered"}
+
+
+def controller_can_wake(hci):
+    """Whether the PCI controller hosting this adapter may wake the system.
+
+    Checked at the PCI level rather than the closest USB ancestor: on some
+    machines intermediate USB hubs report wakeup=disabled while the system
+    still wakes, because the xHCI controller's own setting is what gates it.
+    Returns None if it can't be determined (e.g. non-PCI adapter).
+    """
+    path = os.path.realpath(f"/sys/class/bluetooth/{hci}")
+    while path.startswith("/sys/devices/"):
+        subsystem = os.path.basename(os.path.realpath(os.path.join(path, "subsystem")))
+        if subsystem == "pci":
+            try:
+                with open(os.path.join(path, "power", "wakeup")) as f:
+                    return f.read().strip() == "enabled"
+            except OSError:
+                return None
+        path = os.path.dirname(path)
+    return None
+
+
+class Window(Adw.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Bluetooth Wake", default_width=420, default_height=480)
+        self.bus = Gio.bus_get_sync(Gio.BusType.SYSTEM)
+        self._rebuild_pending = False
+
+        self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, css_classes=["boxed-list"])
+        clamp = Adw.Clamp(child=self.list, margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        self.empty = Adw.StatusPage(
+            icon_name="bluetooth-disabled-symbolic",
+            title="No Devices",
+            description="No paired or connected Bluetooth devices.",
+        )
+        self.stack = Gtk.Stack()
+        self.stack.add_named(Gtk.ScrolledWindow(child=clamp, vexpand=True), "list")
+        self.stack.add_named(self.empty, "empty")
+
+        self.powered_banner = Adw.Banner(title="Bluetooth is off — wake settings may not apply")
+        self.wake_banner = Adw.Banner(title="The Bluetooth controller cannot wake the system — these switches have no effect")
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        for widget in (self.powered_banner, self.wake_banner, self.stack):
+            box.append(widget)
+
+        self.toasts = Adw.ToastOverlay(child=box)
+        view = Adw.ToolbarView(content=self.toasts)
+        view.add_top_bar(Adw.HeaderBar())
+        self.set_content(view)
+
+        # Any device/adapter change from BlueZ triggers a (debounced) rebuild.
+        self.bus.signal_subscribe(
+            BLUEZ, "org.freedesktop.DBus.Properties", "PropertiesChanged", None, None,
+            Gio.DBusSignalFlags.NONE, self._on_props_changed,
+        )
+        for signal in ("InterfacesAdded", "InterfacesRemoved"):
+            self.bus.signal_subscribe(
+                BLUEZ, "org.freedesktop.DBus.ObjectManager", signal, "/", None,
+                Gio.DBusSignalFlags.NONE, lambda *_: self._schedule_rebuild(),
+            )
+
+        # sysfs can't be watched cheaply; re-check when the window regains focus.
+        self.connect("notify::is-active", lambda w, _: w.is_active() and self._schedule_rebuild())
+
+        self.rebuild()
+
+    def _on_props_changed(self, _bus, _sender, _path, _iface, _signal, params):
+        iface, changed, invalidated = params.unpack()
+        if iface in (DEVICE_IFACE, ADAPTER_IFACE) and WATCHED_PROPS & (set(changed) | set(invalidated)):
+            self._schedule_rebuild()
+
+    def _schedule_rebuild(self):
+        if not self._rebuild_pending:
+            self._rebuild_pending = True
+            GLib.idle_add(self.rebuild)
+
+    def rebuild(self):
+        self._rebuild_pending = False
+        try:
+            (objects,) = self.bus.call_sync(
+                BLUEZ, "/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects",
+                None, None, Gio.DBusCallFlags.NONE, -1, None,
+            ).unpack()
+        except GLib.Error as e:
+            self.empty.set_title("BlueZ Unavailable")
+            self.empty.set_description(e.message)
+            self.stack.set_visible_child_name("empty")
+            self.powered_banner.set_revealed(False)
+            self.wake_banner.set_revealed(False)
+            return GLib.SOURCE_REMOVE
+
+        adapters = {path: ifaces[ADAPTER_IFACE] for path, ifaces in objects.items() if ADAPTER_IFACE in ifaces}
+        self.powered_banner.set_revealed(any(not a.get("Powered") for a in adapters.values()))
+        self.wake_banner.set_revealed(any(controller_can_wake(os.path.basename(p)) is False for p in adapters))
+
+        devices = [
+            (path, ifaces[DEVICE_IFACE])
+            for path, ifaces in objects.items()
+            if DEVICE_IFACE in ifaces
+            and (ifaces[DEVICE_IFACE].get("Paired") or ifaces[DEVICE_IFACE].get("Connected"))
+        ]
+        devices.sort(key=lambda d: (not d[1].get("Connected"), d[1].get("Alias", "").lower()))
+
+        self.list.remove_all()
+        for path, props in devices:
+            self.list.append(self._make_row(path, props))
+        self.stack.set_visible_child_name("list" if devices else "empty")
+        return GLib.SOURCE_REMOVE
+
+    def _make_row(self, path, props):
+        name = props.get("Alias") or props.get("Name") or props.get("Address", "?")
+        state = "Connected" if props.get("Connected") else "Paired"
+        subtitle = f"{state} · {props.get('Address', '')}"
+
+        if "WakeAllowed" not in props:
+            row = Adw.ActionRow(title=name, subtitle=f"{subtitle} · cannot wake the system", sensitive=False)
+        else:
+            row = Adw.SwitchRow(title=name, subtitle=subtitle, active=props["WakeAllowed"])
+            row.connect("notify::active", self._on_toggled, path)
+        row.add_prefix(Gtk.Image(icon_name=self._icon_for(props)))
+        return row
+
+    def _icon_for(self, props):
+        theme = Gtk.IconTheme.get_for_display(self.get_display())
+        icon = f"{props.get('Icon', '')}-symbolic"
+        return icon if theme.has_icon(icon) else "bluetooth-symbolic"
+
+    def _on_toggled(self, row, _pspec, path):
+        value = row.get_active()
+
+        def done(bus, result):
+            try:
+                bus.call_finish(result)
+            except GLib.Error as e:
+                self.toasts.add_toast(Adw.Toast(title=f"Failed: {e.message}"))
+                self._schedule_rebuild()  # resync switch with actual state
+
+        self.bus.call(
+            BLUEZ, path, "org.freedesktop.DBus.Properties", "Set",
+            GLib.Variant("(ssv)", (DEVICE_IFACE, "WakeAllowed", GLib.Variant("b", value))),
+            None, Gio.DBusCallFlags.NONE, -1, None, done,
+        )
+
+
+class App(Adw.Application):
+    def __init__(self):
+        super().__init__(application_id=APP_ID)
+        Gtk.Window.set_default_icon_name(APP_ID)
+
+    def do_activate(self):
+        (self.props.active_window or Window(self)).present()
+
+
+if __name__ == "__main__":
+    sys.exit(App().run(sys.argv))

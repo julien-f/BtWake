@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Bluetooth Wake
+Comment=Choose which Bluetooth devices can wake the computer
+Exec=bt-wake
+Icon=io.github.julien_f.BtWake
+Terminal=false
+Categories=GTK;GNOME;Settings;HardwareSettings;
+Keywords=bluetooth;suspend;sleep;wake;resume;mouse;keyboard;
+StartupNotify=true

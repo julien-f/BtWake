@@ -1,0 +1,28 @@
+id: io.github.julien_f.BtWake
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+command: bt-wake
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # Read and change device settings in BlueZ
+  - --system-talk-name=org.bluez
+modules:
+  - name: bt-wake
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 bt-wake -t ${FLATPAK_DEST}/bin
+      - install -Dm644 data/${FLATPAK_ID}.desktop -t ${FLATPAK_DEST}/share/applications
+      - install -Dm644 data/${FLATPAK_ID}.metainfo.xml -t ${FLATPAK_DEST}/share/metainfo
+      - install -Dm644 data/icons/hicolor/scalable/apps/${FLATPAK_ID}.svg -t ${FLATPAK_DEST}/share/icons/hicolor/scalable/apps
+    sources:
+      # For the Flathub submission, replace with:
+      #   - type: git
+      #     url: https://github.com/julien-f/bt-wake.git
+      #     tag: v0.1.0
+      #     commit: <commit hash>
+      - type: dir
+        path: .

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.julien_f.BtWake</id>
+  <name>Bluetooth Wake</name>
+  <summary>Choose which Bluetooth devices can wake the computer</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer id="io.github.julien_f">
+    <name>Julien Fontanet</name>
+  </developer>
+  <description>
+    <p>
+      A bumped Bluetooth mouse or a controller turning on can wake a suspended
+      computer. Bluetooth Wake lists your paired and connected devices and lets
+      you switch off, per device, whether each one may wake the system.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Per-device wake toggle for mice, keyboards and game controllers</li>
+      <li>Warns when the Bluetooth controller itself cannot wake the system</li>
+      <li>Warns when Bluetooth is turned off</li>
+      <li>Updates live as devices connect, disconnect or are paired</li>
+    </ul>
+    <p>
+      Only input devices support this setting. Some adapter firmware ignores it;
+      in that case wakeup must be disabled for the whole USB controller.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.julien_f.BtWake.desktop</launchable>
+  <url type="homepage">https://github.com/julien-f/bt-wake</url>
+  <url type="bugtracker">https://github.com/julien-f/bt-wake/issues</url>
+  <url type="vcs-browser">https://github.com/julien-f/bt-wake</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/julien-f/bt-wake/v0.1.0/data/screenshots/main.png</image>
+      <caption>List of Bluetooth devices with wake toggles</caption>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <branding>
+    <color type="primary" scheme_preference="light">#99c1f1</color>
+    <color type="primary" scheme_preference="dark">#1a5fb4</color>
+  </branding>
+  <releases>
+    <release version="0.1.0" date="2026-09-23">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
+</component>
