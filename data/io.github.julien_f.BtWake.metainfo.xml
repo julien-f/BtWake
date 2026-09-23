@@ -27,12 +27,12 @@
     </p>
   </description>
   <launchable type="desktop-id">io.github.julien_f.BtWake.desktop</launchable>
-  <url type="homepage">https://github.com/julien-f/bt-wake</url>
-  <url type="bugtracker">https://github.com/julien-f/bt-wake/issues</url>
-  <url type="vcs-browser">https://github.com/julien-f/bt-wake</url>
+  <url type="homepage">https://github.com/julien-f/BtWake</url>
+  <url type="bugtracker">https://github.com/julien-f/BtWake/issues</url>
+  <url type="vcs-browser">https://github.com/julien-f/BtWake</url>
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/julien-f/bt-wake/v0.1.0/data/screenshots/main.png</image>
+      <image>https://raw.githubusercontent.com/julien-f/BtWake/v0.1.0/data/screenshots/main.png</image>
       <caption>List of Bluetooth devices with wake toggles</caption>
     </screenshot>
   </screenshots>
